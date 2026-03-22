@@ -1,0 +1,123 @@
+version: "3.9"
+name: ruview
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Development stack — hot-reload, Postgres, Redis, Prometheus, Grafana
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── RuView API (dev) ───────────────────────────────────────────────────────
+  wifi-densepose-dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: development
+    image: ruview-dev:latest
+    container_name: ruview-dev
+    ports:
+      - "8000:8000"
+    environment:
+      RUST_LOG: debug
+      ENVIRONMENT: development
+      RUVIEW_PORT: "8000"
+      AUTH_ENABLED: "false"
+      DATABASE_URL: sqlite:ruview-dev.db
+      HARDWARE_MODE: simulated
+    volumes:
+      - .:/app
+      - /app/target              # exclude target dir from volume
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks: [ruview-net]
+    restart: unless-stopped
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: ruview-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB:       wifi_densepose
+      POSTGRES_USER:     wifi_user
+      POSTGRES_PASSWORD: devpassword
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "wifi_user", "-d", "wifi_densepose"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [ruview-net]
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: ruview-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks: [ruview-net]
+
+  # ── Prometheus ─────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ruview-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    networks: [ruview-net]
+
+  # ── Grafana ────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ruview-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER:     admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP:     "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on: [prometheus]
+    networks: [ruview-net]
+
+  # ── Nginx reverse proxy ────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: ruview-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ui:/usr/share/nginx/html:ro
+    depends_on: [wifi-densepose-dev]
+    networks: [ruview-net]
+
+networks:
+  ruview-net:
+    driver: bridge
+
+volumes:
+  pg-data:
+  redis-data:
+  prom-data:
+  grafana-data:

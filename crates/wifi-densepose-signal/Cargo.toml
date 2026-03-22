@@ -1,0 +1,29 @@
+[package]
+name        = "wifi-densepose-signal"
+description = "High-performance CSI signal processing — FFT, phase sanitization, feature extraction, motion detection"
+version.workspace    = true
+edition.workspace    = true
+authors.workspace    = true
+license.workspace    = true
+repository.workspace = true
+
+[dependencies]
+wifi-densepose-core = { workspace = true }
+thiserror   = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+ndarray     = { workspace = true }
+rustfft     = { workspace = true }
+num-complex = { workspace = true }
+num-traits  = { workspace = true }
+rayon       = { workspace = true }
+tracing     = { workspace = true }
+
+[dev-dependencies]
+criterion   = { workspace = true }
+proptest    = { workspace = true }
+approx      = "0.5"
+
+[[bench]]
+name    = "signal_bench"
+harness = false

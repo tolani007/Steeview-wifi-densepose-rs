@@ -1,0 +1,17 @@
+[package]
+name        = "wifi-densepose-nn"
+description = "Neural network inference for pose estimation (pure-Rust candle backend)"
+version.workspace    = true
+edition.workspace    = true
+authors.workspace    = true
+license.workspace    = true
+repository.workspace = true
+
+[dependencies]
+wifi-densepose-core   = { workspace = true }
+wifi-densepose-signal = { workspace = true }
+thiserror  = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+ndarray    = { workspace = true }
+tracing    = { workspace = true }

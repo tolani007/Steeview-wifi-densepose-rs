@@ -1,0 +1,30 @@
+[package]
+name        = "wifi-densepose-cli"
+description = "Command-line interface for WiFi DensePose"
+version.workspace    = true
+edition.workspace    = true
+authors.workspace    = true
+license.workspace    = true
+repository.workspace = true
+
+[[bin]]
+name = "ruview"
+path = "src/main.rs"
+
+[dependencies]
+wifi-densepose-core     = { workspace = true }
+wifi-densepose-config   = { workspace = true }
+wifi-densepose-signal   = { workspace = true }
+wifi-densepose-hardware = { workspace = true }
+wifi-densepose-api      = { workspace = true }
+wifi-densepose-mat      = { workspace = true }
+wifi-densepose-nn       = { workspace = true }
+thiserror  = { workspace = true }
+sha2       = { workspace = true }
+anyhow     = { workspace = true }
+clap       = { workspace = true }
+tokio      = { workspace = true }
+tracing    = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde_json = { workspace = true }
+indicatif  = { workspace = true }

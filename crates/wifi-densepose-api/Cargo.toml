@@ -1,0 +1,34 @@
+[package]
+name        = "wifi-densepose-api"
+description = "Axum-based HTTP/WebSocket API server with JWT auth, rate limiting, and Prometheus metrics"
+version.workspace    = true
+edition.workspace    = true
+authors.workspace    = true
+license.workspace    = true
+repository.workspace = true
+
+[dependencies]
+wifi-densepose-core     = { workspace = true }
+wifi-densepose-signal   = { workspace = true }
+wifi-densepose-config   = { workspace = true }
+wifi-densepose-hardware = { workspace = true }
+wifi-densepose-nn       = { workspace = true }
+wifi-densepose-db       = { workspace = true }
+thiserror     = { workspace = true }
+anyhow        = { workspace = true }
+serde         = { workspace = true }
+serde_json    = { workspace = true }
+tokio         = { workspace = true }
+axum          = { workspace = true }
+tower         = { workspace = true }
+tower-http    = { workspace = true }
+hyper         = { workspace = true }
+tracing       = { workspace = true }
+tracing-subscriber = { workspace = true }
+jsonwebtoken  = { workspace = true }
+subtle        = { workspace = true }
+governor      = { workspace = true }
+chrono        = { workspace = true }
+uuid          = { workspace = true }
+futures       = { workspace = true }
+bytes         = { workspace = true }

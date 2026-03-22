@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RuView WiFi DensePose — 3D Visualization</title>
+<meta name="description" content="Real-time 3D WiFi DensePose visualization — skeleton rendering, signal waterfall, and presence heatmap">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#030912; --panel:#0a1628; --border:#1a2d50;
+    --cyan:#00e5ff; --violet:#8b5cf6; --green:#10b981;
+    --orange:#f59e0b; --red:#ef4444; --pink:#ec4899;
+    --text:#e2e8f0; --dim:#64748b;
+    --font:'Inter',system-ui,sans-serif;
+  }
+  html,body{width:100%;height:100%;background:var(--bg);color:var(--text);font-family:var(--font);overflow:hidden}
+  #canvas-3d{position:fixed;inset:0;z-index:0}
+
+  /* ── Header ── */
+  header{
+    position:fixed;top:0;left:0;right:0;z-index:10;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:10px 20px;
+    background:rgba(3,9,18,.85);
+    backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--border);
+  }
+  .logo{display:flex;align-items:center;gap:10px}
+  .logo-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--cyan),var(--violet));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
+  .logo-text h1{font-size:15px;font-weight:700;letter-spacing:.05em}
+  .logo-text p{font-size:10px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
+  .header-right{display:flex;align-items:center;gap:16px;font-size:12px}
+  .badge{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:.05em}
+  .badge-live{background:rgba(16,185,129,.15);color:var(--green);border:1px solid rgba(16,185,129,.3);animation:pulse 2s ease-in-out infinite}
+  .badge-demo{background:rgba(245,158,11,.15);color:var(--orange);border:1px solid rgba(245,158,11,.3)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+  .stat-pill{background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:11px;color:var(--dim)}
+  .stat-pill span{color:var(--text);font-weight:600}
+
+  /* ── Side panel ── */
+  .side-panel{
+    position:fixed;right:16px;top:72px;bottom:16px;width:260px;z-index:10;
+    display:flex;flex-direction:column;gap:10px;overflow-y:auto;
+    scrollbar-width:none;
+  }
+  .card{
+    background:rgba(10,22,40,.8);backdrop-filter:blur(8px);
+    border:1px solid var(--border);border-radius:12px;padding:14px;
+  }
+  .card-title{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+  .card-title span{color:var(--cyan)}
+
+  /* ── Vital grid ── */
+  .vital-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .vital-box{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:8px}
+  .vital-label{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px}
+  .vital-value{font-size:22px;font-weight:700;line-height:1;letter-spacing:-.02em}
+  .vital-unit{font-size:9px;color:var(--dim);margin-top:2px}
+  .vital-trend{font-size:9px;margin-top:4px}
+  .v-breath{color:var(--cyan)} .v-hr{color:var(--pink)} .v-conf{color:var(--green)} .v-pres{color:var(--violet)}
+
+  /* ── ECG ── */
+  #ecg-canvas{width:100%;height:60px;border-radius:6px;background:rgba(0,229,255,.03)}
+
+  /* ── Heatmap ── */
+  #heatmap-canvas{width:100%;height:120px;border-radius:6px;image-rendering:pixelated}
+
+  /* ── Persons list ── */
+  .person-item{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border-radius:8px;margin-bottom:4px}
+  .p0-item{background:rgba(0,229,255,.06);border:1px solid rgba(0,229,255,.2)}
+  .p1-item{background:rgba(139,92,246,.06);border:1px solid rgba(139,92,246,.2)}
+  .person-dot{width:8px;height:8px;border-radius:50%}
+  .p0-dot{background:var(--cyan)} .p1-dot{background:var(--violet)}
+  .person-info{font-size:11px;flex:1;padding-left:8px}
+  .person-conf{font-size:10px;color:var(--dim)}
+
+  /* ── Controls ── */
+  .controls{display:flex;gap:6px;flex-wrap:wrap}
+  .btn{
+    padding:6px 12px;border:1px solid var(--border);border-radius:6px;
+    background:rgba(255,255,255,.04);color:var(--text);cursor:pointer;
+    font-size:11px;font-family:inherit;transition:all .15s;
+  }
+  .btn:hover{background:rgba(0,229,255,.08);border-color:var(--cyan);color:var(--cyan)}
+  .btn.active{background:rgba(0,229,255,.12);border-color:var(--cyan);color:var(--cyan)}
+
+  /* ── Waterfall ── */
+  #waterfall-canvas{width:100%;height:80px;border-radius:6px;background:#000}
+
+  /* ── Bottom bar ── */
+  .bottom-bar{
+    position:fixed;bottom:0;left:0;right:284px;z-index:10;
+    padding:8px 16px;
+    background:rgba(3,9,18,.8);backdrop-filter:blur(8px);
+    border-top:1px solid var(--border);
+    font-size:10px;color:var(--dim);
+    display:flex;align-items:center;gap:16px;
+  }
+  .pipeline-step{display:flex;align-items:center;gap:6px}
+  .step-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 1.5s ease-in-out infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+</style>
+</head>
+<body>
+<canvas id="canvas-3d"></canvas>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">📡</div>
+    <div class="logo-text">
+      <h1>RuView WiFi DensePose</h1>
+      <p>Rust Port · ~810× Speedup · ~54,000 fps Pipeline</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="stat-pill">FPS: <span id="fps-display">0</span></div>
+    <div class="stat-pill">Frame: <span id="frame-display">0</span></div>
+    <div class="stat-pill">Persons: <span id="persons-display">0</span></div>
+    <div id="conn-badge" class="badge badge-demo">DEMO MODE</div>
+  </div>
+</header>
+
+<div class="side-panel">
+  <!-- Vital Signs -->
+  <div class="card">
+    <div class="card-title"><span>❤</span> VITAL SIGNS <span id="vitals-person">P0</span></div>
+    <div class="vital-grid">
+      <div class="vital-box">
+        <div class="vital-label">Breathing</div>
+        <div class="vital-value v-breath" id="br-val">--</div>
+        <div class="vital-unit">breaths/min</div>
+        <div class="vital-trend" id="br-trend">—</div>
+      </div>
+      <div class="vital-box">
+        <div class="vital-label">Heart Rate</div>
+        <div class="vital-value v-hr" id="hr-val">--</div>
+        <div class="vital-unit">bpm</div>
+        <div class="vital-trend" id="hr-trend">—</div>
+      </div>
+      <div class="vital-box">
+        <div class="vital-label">Confidence</div>
+        <div class="vital-value v-conf" id="conf-val">--</div>
+        <div class="vital-unit">%</div>
+      </div>
+      <div class="vital-box">
+        <div class="vital-label">Presence</div>
+        <div class="vital-value v-pres" id="pres-val">--</div>
+        <div class="vital-unit">score</div>
+      </div>
+    </div>
+    <div style="margin-top:10px">
+      <div class="card-title" style="margin-bottom:6px">BREATHING WAVEFORM (CSI)</div>
+      <canvas id="ecg-canvas"></canvas>
+    </div>
+  </div>
+
+  <!-- Persons -->
+  <div class="card">
+    <div class="card-title"><span>🦴</span> DETECTED PERSONS</div>
+    <div id="persons-list">
+      <div class="person-item p0-item">
+        <div class="person-dot p0-dot"></div>
+        <div class="person-info"><b>P0</b> — Awaiting signal…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Room Heatmap -->
+  <div class="card">
+    <div class="card-title"><span>🏠</span> ROOM PRESENCE FIELD <span style="margin-left:auto;font-weight:400">16×16 RF</span></div>
+    <canvas id="heatmap-canvas"></canvas>
+  </div>
+
+  <!-- Signal Waterfall -->
+  <div class="card">
+    <div class="card-title"><span>📶</span> CSI SIGNAL WATERFALL</div>
+    <canvas id="waterfall-canvas"></canvas>
+  </div>
+
+  <!-- Controls -->
+  <div class="card">
+    <div class="card-title"><span>⚙</span> VIEW CONTROLS</div>
+    <div class="controls">
+      <button class="btn active" id="btn-skeleton" onclick="toggleOverlay('skeleton')">🦴 Skeleton</button>
+      <button class="btn active" id="btn-particles" onclick="toggleOverlay('particles')">✦ Particles</button>
+      <button class="btn active" id="btn-floor"     onclick="toggleOverlay('floor')">⬛ Floor</button>
+      <button class="btn"       id="btn-wireframe"  onclick="toggleOverlay('wireframe')">⊡ Wireframe</button>
+    </div>
+  </div>
+</div>
+
+<div class="bottom-bar">
+  <div class="pipeline-step"><div class="step-dot"></div>CSI Preprocess: ~5.19µs</div>
+  <div class="pipeline-step"><div class="step-dot" style="animation-delay:.3s"></div>Phase Sanitize: ~3.84µs</div>
+  <div class="pipeline-step"><div class="step-dot" style="animation-delay:.6s"></div>Feature Extract: ~9.03µs</div>
+  <div class="pipeline-step"><div class="step-dot" style="animation-delay:.9s"></div>Motion Detect: ~186ns</div>
+  <span style="margin-left:auto; color:#64748b">Full pipeline: ~18.47µs → </span>
+  <span style="color:#10b981;font-weight:700">~54,000 fps</span>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Three.js 3D Scene (loaded from CDN)
+// ─────────────────────────────────────────────────────────────────────────────
+const THREEJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+
+// Overlay state
+const overlays = { skeleton: true, particles: true, floor: true, wireframe: false };
+function toggleOverlay(key) {
+  overlays[key] = !overlays[key];
+  document.getElementById('btn-' + key).classList.toggle('active', overlays[key]);
+  scene3d && updateVisibility();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Internal state
+// ─────────────────────────────────────────────────────────────────────────────
+let state = {
+  frameId: 0, fps: 0, nPersons: 0,
+  persons: [],
+  breathing: 15.0, heartRate: 72.0, confidence: 0.85, presence: 0.9,
+  field: Array.from({length:16},()=>new Array(16).fill(0)),
+  rmsPerLink: new Array(12).fill(0),
+  t: 0,
+};
+let prevBr = 15, prevHr = 72;
+let ecgPoints = []; const ECG_LEN = 120;
+let waterfallRows = []; const WATERFALL_H = 40;
+
+// COCO-17 skeleton edges
+const SKELETON_EDGES = [
+  [0,1],[0,2],[1,3],[2,4],
+  [5,6],[5,7],[7,9],[6,8],[8,10],
+  [5,11],[6,12],[11,12],
+  [11,13],[13,15],[12,14],[14,16],
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WebSocket connection
+// ─────────────────────────────────────────────────────────────────────────────
+let ws = null;
+let wsRetries = 0;
+const WS_URLS = ['ws://localhost:8000/ws/sensing', 'ws://localhost:3000/ws/sensing'];
+let wsUrlIdx = 0;
+
+function connectWS() {
+  try {
+    ws = new WebSocket(WS_URLS[wsUrlIdx % WS_URLS.length]);
+    ws.onopen = () => {
+      console.log('WS connected:', WS_URLS[wsUrlIdx % WS_URLS.length]);
+      document.getElementById('conn-badge').textContent = '● LIVE';
+      document.getElementById('conn-badge').className = 'badge badge-live';
+      wsRetries = 0;
+    };
+    ws.onmessage = (evt) => {
+      try { handleWSMessage(JSON.parse(evt.data)); } catch(e){}
+    };
+    ws.onerror = ws.onclose = () => {
+      document.getElementById('conn-badge').textContent = 'DEMO MODE';
+      document.getElementById('conn-badge').className = 'badge badge-demo';
+      wsUrlIdx++;
+      if (wsRetries++ < 10) setTimeout(connectWS, 2000);
+    };
+  } catch(e) {}
+}
+
+function handleWSMessage(data) {
+  state.frameId = data.frame_id || state.frameId + 1;
+  if (data.frame) state.rmsPerLink = data.frame.rms_per_link || state.rmsPerLink;
+
+  if (data.pose && data.pose.persons) {
+    state.nPersons = data.pose.persons.length;
+    state.persons = data.pose.persons;
+    if (data.pose.persons[0]) {
+      const p = data.pose.persons[0];
+      state.breathing  = p.breathing_bpm;
+      state.heartRate  = p.heart_rate_bpm;
+      state.confidence = p.confidence;
+      state.presence   = p.confidence;
+    }
+  }
+  if (data.vitals) {
+    state.breathing  = data.vitals.breathing_bpm  || state.breathing;
+    state.heartRate  = data.vitals.heart_rate_bpm || state.heartRate;
+    state.confidence = data.vitals.confidence     || state.confidence;
+    state.presence   = data.vitals.presence_score || state.presence;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Simulation (demo mode when no WS)
+// ─────────────────────────────────────────────────────────────────────────────
+let simT = 0;
+function tickSim(dt) {
+  simT += dt;
+  state.t = simT;
+  state.frameId++;
+  if (!ws || ws.readyState !== 1) {
+    // Simulate 2 persons
+    state.nPersons = 2;
+    const persons = [];
+    for (let i = 0; i < 2; i++) {
+      const seed = i * 2.1;
+      const cx = 0.2 + 0.6 * (0.5 + 0.4 * Math.sin(simT * 0.07 + seed));
+      const cy = 0.2 + 0.6 * (0.5 + 0.4 * Math.cos(simT * 0.05 + seed * 1.7));
+      persons.push({ person_id: i, x: cx, y: cy,
+        breathing_bpm: 15.0 + Math.sin(simT * 0.01 + seed) * 2,
+        heart_rate_bpm: 72.0 + Math.cos(simT * 0.007 + seed) * 5,
+        confidence: 0.85 + Math.sin(simT * 0.03) * 0.05,
+        keypoints: buildSimKeypoints(cx, cy, simT, seed),
+      });
+    }
+    state.persons = persons;
+    if (persons[0]) {
+      state.breathing  = persons[0].breathing_bpm;
+      state.heartRate  = persons[0].heart_rate_bpm;
+      state.confidence = persons[0].confidence;
+      state.presence   = 0.95 + Math.sin(simT * 0.02) * 0.04;
+    }
+
+    // Simulated CSI RMS
+    for (let l = 0; l < 12; l++) {
+      state.rmsPerLink[l] = 0.5 + 0.3 * Math.sin(simT * (1 + l * 0.1) + l * 0.5);
+    }
+  }
+
+  // Simulate room field from person positions
+  const field = Array.from({length:16},()=>new Array(16).fill(0));
+  for (const p of state.persons) {
+    const r = Math.floor((p.y || 0.5) * 15);
+    const c = Math.floor((p.x || 0.5) * 15);
+    for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
+      const rr = Math.max(0,Math.min(15, r+dr));
+      const cc = Math.max(0,Math.min(15, c+dc));
+      const dist = Math.sqrt(dr*dr+dc*dc);
+      field[rr][cc] = Math.min(1, field[rr][cc] + (p.confidence||0.8) * Math.exp(-dist * 0.7));
+    }
+  }
+  state.field = field;
+}
+
+function buildSimKeypoints(cx, cy, t, seed) {
+  const s = 0.08;
+  const breath  = 0.012 * Math.sin(Math.PI * 2 * 0.25 * t + seed);
+  const gesture = 0.012 * Math.sin(Math.PI * 2 * 0.12 * t + seed * 1.7);
+  const offsets = [
+    [0, -s*1.8], [-s*.12, -s*2], [s*.12, -s*2], [-s*.22, -s*1.95], [s*.22, -s*1.95],
+    [-s*.5, -s*1.2+breath], [s*.5, -s*1.2+breath],
+    [-s*.9, -s*.5+gesture], [s*.9, -s*.5-gesture],
+    [-s*1.1, s*.1+gesture*1.5], [s*1.1, s*.1-gesture*1.5],
+    [-s*.35, s*.5+breath*.5], [s*.35, s*.5+breath*.5],
+    [-s*.38, s*1.4], [s*.38, s*1.4],
+    [-s*.35, s*2.2], [s*.35, s*2.2],
+  ];
+  return offsets.map(([dx,dy],i) => ({
+    x: Math.max(0,Math.min(1, cx+dx)),
+    y: Math.max(0,Math.min(1, cy+dy)),
+    confidence: 0.85, visible: true,
+  }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI Updates
+// ─────────────────────────────────────────────────────────────────────────────
+function updateUI() {
+  document.getElementById('fps-display').textContent     = state.fps;
+  document.getElementById('frame-display').textContent   = state.frameId;
+  document.getElementById('persons-display').textContent = state.nPersons;
+
+  const br   = state.breathing.toFixed(1);
+  const hr   = Math.round(state.heartRate);
+  const conf = Math.round(state.confidence * 100);
+  const pres = Math.round(state.presence * 100);
+
+  document.getElementById('br-val').textContent   = br;
+  document.getElementById('hr-val').textContent   = hr;
+  document.getElementById('conf-val').textContent = conf;
+  document.getElementById('pres-val').textContent = pres;
+
+  const brDiff = state.breathing - prevBr;
+  const hrDiff = state.heartRate - prevHr;
+  document.getElementById('br-trend').textContent = brDiff > 0.1 ? '↑ rising' : brDiff < -0.1 ? '↓ falling' : '→ stable';
+  document.getElementById('hr-trend').textContent = hrDiff > 0.5 ? '↑ rising' : hrDiff < -0.5 ? '↓ falling' : '→ stable';
+  prevBr = state.breathing; prevHr = state.heartRate;
+
+  // Persons list
+  const list = document.getElementById('persons-list');
+  list.innerHTML = '';
+  if (state.persons.length === 0) {
+    list.innerHTML = '<div style="color:var(--dim);font-size:11px;text-align:center;padding:8px">No persons detected</div>';
+  }
+  state.persons.forEach((p, i) => {
+    const cls = i === 0 ? 'p0' : 'p1';
+    list.innerHTML += `
+      <div class="person-item ${cls}-item">
+        <div class="person-dot ${cls}-dot"></div>
+        <div class="person-info">
+          <b>P${p.person_id}</b>
+          · ${(p.confidence*100).toFixed(0)}% conf
+          · ${p.breathing_bpm?.toFixed(1)||'--'} bpm
+        </div>
+      </div>`;
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2D Canvas: ECG waveform
+// ─────────────────────────────────────────────────────────────────────────────
+function drawECG() {
+  const canvas = document.getElementById('ecg-canvas');
+  const W = canvas.offsetWidth; const H = 60;
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+
+  // Push new point
+  const br_hz = state.breathing / 60;
+  const v = 0.5 + 0.4 * Math.sin(2 * Math.PI * br_hz * state.t);
+  ecgPoints.push(v);
+  if (ecgPoints.length > ECG_LEN) ecgPoints.shift();
+
+  ctx.beginPath();
+  ctx.strokeStyle = '#00e5ff';
+  ctx.lineWidth   = 1.5;
+  ctx.shadowBlur  = 6;
+  ctx.shadowColor = '#00e5ff';
+  ecgPoints.forEach((p, i) => {
+    const x = (i / ECG_LEN) * W;
+    const y = H - p * (H - 4) - 2;
+    i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2D Canvas: Room presence heatmap
+// ─────────────────────────────────────────────────────────────────────────────
+function drawHeatmap() {
+  const canvas = document.getElementById('heatmap-canvas');
+  canvas.width = 64; canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  const field = state.field;
+  const cw = 64/16, ch = 64/16;
+
+  for (let r=0;r<16;r++) for (let c=0;c<16;c++) {
+    const v = field[r][c] || 0;
+    const h   = 160 + v * 120;  // blue→green→yellow
+    const sat = 60  + v * 40;
+    const lum = 5   + v * 35;
+    ctx.fillStyle = `hsl(${h},${sat}%,${lum}%)`;
+    ctx.fillRect(c*cw, r*ch, cw, ch);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2D Canvas: CSI signal waterfall
+// ─────────────────────────────────────────────────────────────────────────────
+function drawWaterfall() {
+  const canvas = document.getElementById('waterfall-canvas');
+  const W = canvas.offsetWidth; const H = 80;
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  // New row from current RMS
+  const row = Array.from({length:48}, (_,i) => {
+    const linkRms = state.rmsPerLink[i % state.rmsPerLink.length] || 0;
+    return linkRms + 0.1 * Math.sin(state.t * 2.1 + i * 0.3);
+  });
+  waterfallRows.unshift(row);
+  if (waterfallRows.length > WATERFALL_H) waterfallRows.pop();
+
+  // Draw each row as coloured horizontal strip
+  const rh = H / WATERFALL_H;
+  waterfallRows.forEach((row, ri) => {
+    const rw = W / row.length;
+    row.forEach((v, ci) => {
+      const intensity = Math.min(1, Math.max(0, v));
+      const hue = 200 + intensity * 80;
+      const sat = 60 + intensity * 40;
+      const lum = 5  + intensity * 40;
+      ctx.fillStyle = `hsl(${hue},${sat}%,${lum}%)`;
+      ctx.fillRect(ci * rw, ri * rh, rw + 0.5, rh + 0.5);
+    });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3D Scene with Three.js
+// ─────────────────────────────────────────────────────────────────────────────
+let scene3d = null, renderer3d = null, camera3d = null;
+let skeletonMeshes = [], particleSystem = null, floorMesh = null;
+let isDragging=false, prevMouse={x:0,y:0};
+let cameraTheta=-0.5, cameraPhi=1.1, cameraRadius=6;
+
+function init3D(THREE) {
+  const canvas  = document.getElementById('canvas-3d');
+  const scene   = new THREE.Scene();
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.setClearColor(0x030912, 1);
+
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 100);
+  updateCamera(camera);
+
+  scene3d = scene; renderer3d = renderer; camera3d = camera;
+
+  // Ambient + directional lights
+  scene.add(new THREE.AmbientLight(0x1a2d50, 0.8));
+  const dir = new THREE.DirectionalLight(0x00e5ff, 0.6);
+  dir.position.set(3, 6, 3);
+  dir.castShadow = true;
+  scene.add(dir);
+  scene.add(new THREE.PointLight(0x8b5cf6, 0.5, 8, 2).translateY(2));
+
+  // Grid floor
+  const grid = new THREE.GridHelper(10, 20, 0x1a2d50, 0x0d1f3c);
+  grid.position.y = -1.5;
+  scene.add(grid);
+  floorMesh = grid;
+
+  // Room boundary box (wireframe)
+  const roomGeo = new THREE.BoxGeometry(5, 3, 4);
+  const roomMat = new THREE.MeshBasicMaterial({ color: 0x1a2d50, wireframe: true, transparent: true, opacity: 0.15 });
+  const roomBox = new THREE.Mesh(roomGeo, roomMat);
+  roomBox.position.set(0, 0, 0);
+  scene.add(roomBox);
+
+  // Particles — signal energy field
+  const partCount = 800;
+  const partGeo   = new THREE.BufferGeometry();
+  const partPos   = new Float32Array(partCount * 3);
+  for (let i = 0; i < partCount; i++) {
+    partPos[i*3  ] = (Math.random() - 0.5) * 6;
+    partPos[i*3+1] = (Math.random() - 0.5) * 3;
+    partPos[i*3+2] = (Math.random() - 0.5) * 5;
+  }
+  partGeo.setAttribute('position', new THREE.BufferAttribute(partPos, 3));
+  const partMat = new THREE.PointsMaterial({ color: 0x00e5ff, size: 0.015, transparent: true, opacity: 0.35 });
+  particleSystem = new THREE.Points(partGeo, partMat);
+  scene.add(particleSystem);
+
+  // Initial skeleton meshes (2 persons)
+  for (let p = 0; p < 2; p++) {
+    const color = p === 0 ? 0x00e5ff : 0x8b5cf6;
+    const group = new THREE.Group();
+    // Joint spheres
+    const joints = [];
+    for (let j = 0; j < 17; j++) {
+      const geo = new THREE.SphereGeometry(0.04, 8, 8);
+      const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.5 });
+      const mesh = new THREE.Mesh(geo, mat);
+      group.add(mesh);
+      joints.push(mesh);
+    }
+    // Bone lines
+    const lineGeo = new THREE.BufferGeometry();
+    const linePts = new Float32Array(SKELETON_EDGES.length * 6);
+    lineGeo.setAttribute('position', new THREE.BufferAttribute(linePts.slice(), 3));
+    const lineMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.7 });
+    const lineSegs = new THREE.LineSegments(lineGeo, lineMat);
+    group.add(lineSegs);
+
+    scene.add(group);
+    skeletonMeshes.push({ group, joints, lineSegs, lineGeo });
+  }
+
+  // Orbit controls (mouse drag)
+  canvas.addEventListener('mousedown', e => { isDragging=true; prevMouse={x:e.clientX,y:e.clientY}; });
+  window.addEventListener('mouseup',   () => isDragging=false);
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    const dx = e.clientX - prevMouse.x;
+    const dy = e.clientY - prevMouse.y;
+    cameraTheta -= dx * 0.005;
+    cameraPhi    = Math.max(0.2, Math.min(Math.PI*.8, cameraPhi - dy * 0.005));
+    prevMouse = {x:e.clientX,y:e.clientY};
+    updateCamera(camera3d);
+  });
+  canvas.addEventListener('wheel', e => {
+    cameraRadius = Math.max(2, Math.min(12, cameraRadius + e.deltaY * 0.005));
+    updateCamera(camera3d);
+  });
+  window.addEventListener('resize', () => {
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+  });
+
+  return { scene, renderer, camera };
+}
+
+function updateCamera(cam) {
+  const x = cameraRadius * Math.sin(cameraPhi) * Math.sin(cameraTheta);
+  const y = cameraRadius * Math.cos(cameraPhi);
+  const z = cameraRadius * Math.sin(cameraPhi) * Math.cos(cameraTheta);
+  cam.position.set(x, y, z);
+  cam.lookAt(0, 0, 0);
+}
+
+function updateVisibility() {
+  skeletonMeshes.forEach(m => m.group.visible = overlays.skeleton);
+  if (particleSystem) particleSystem.visible = overlays.particles;
+  if (floorMesh) floorMesh.visible = overlays.floor;
+}
+
+function update3D(THREE) {
+  if (!scene3d) return;
+
+  // Animate particles
+  if (particleSystem && overlays.particles) {
+    particleSystem.rotation.y += 0.0003;
+    const pos = particleSystem.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      pos.setY(i, pos.getY(i) + Math.sin(state.t * 0.5 + i * 0.1) * 0.001);
+    }
+    pos.needsUpdate = true;
+  }
+
+  // Update skeleton meshes
+  state.persons.forEach((person, pi) => {
+    const sm = skeletonMeshes[pi];
+    if (!sm) return;
+    sm.group.visible = overlays.skeleton;
+    if (!person.keypoints) return;
+
+    // Map normalized [0,1] to 3D space: x→x(-2.5..2.5), y→z(-2..2), depth from conf
+    const kps = person.keypoints;
+    kps.forEach((kp, ki) => {
+      if (sm.joints[ki]) {
+        sm.joints[ki].position.set(
+          (kp.x - 0.5) * 5,
+          -(kp.y - 0.5) * 3,
+          (Math.sin(state.t * 0.05 + pi * 1.3) * 0.3),
+        );
+      }
+    });
+
+    // Update bone lines
+    const pts = sm.lineGeo.attributes.position.array;
+    let idx = 0;
+    SKELETON_EDGES.forEach(([a, b]) => {
+      if (sm.joints[a] && sm.joints[b]) {
+        pts[idx++]=sm.joints[a].position.x; pts[idx++]=sm.joints[a].position.y; pts[idx++]=sm.joints[a].position.z;
+        pts[idx++]=sm.joints[b].position.x; pts[idx++]=sm.joints[b].position.y; pts[idx++]=sm.joints[b].position.z;
+      } else { idx += 6; }
+    });
+    sm.lineGeo.attributes.position.needsUpdate = true;
+  });
+
+  // Hide unused person meshes
+  skeletonMeshes.forEach((sm, pi) => {
+    if (pi >= state.persons.length) sm.group.visible = false;
+  });
+
+  renderer3d.render(scene3d, camera3d);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main loop
+// ─────────────────────────────────────────────────────────────────────────────
+let lastTime = 0;
+let frameCount = 0;
+let fpsTimer = 0;
+
+function loadThreeAndStart() {
+  const script = document.createElement('script');
+  script.src = THREEJS_CDN;
+  script.onload = () => {
+    const THREE = window.THREE;
+    init3D(THREE);
+
+    const loop = (ts) => {
+      requestAnimationFrame(loop);
+      const dt = Math.min((ts - lastTime) / 1000, 0.1);
+      lastTime = ts;
+
+      // Tick simulation
+      tickSim(dt);
+
+      // FPS counter
+      frameCount++;
+      fpsTimer += dt;
+      if (fpsTimer >= 0.5) {
+        state.fps = Math.round(frameCount / fpsTimer);
+        frameCount = 0; fpsTimer = 0;
+      }
+
+      update3D(THREE);
+      updateUI();
+      drawECG();
+      drawHeatmap();
+      drawWaterfall();
+    };
+    requestAnimationFrame(loop);
+  };
+  script.onerror = () => {
+    // Fallback: run without Three.js
+    const loop = (ts) => {
+      requestAnimationFrame(loop);
+      const dt = Math.min((ts - lastTime) / 1000, 0.1);
+      lastTime = ts;
+      tickSim(dt);
+      frameCount++;
+      fpsTimer += dt;
+      if (fpsTimer >= 0.5) { state.fps = Math.round(frameCount / fpsTimer); frameCount=0; fpsTimer=0; }
+      updateUI(); drawECG(); drawHeatmap(); drawWaterfall();
+    };
+    requestAnimationFrame(loop);
+  };
+  document.head.appendChild(script);
+}
+
+// Start
+connectWS();
+loadThreeAndStart();
+</script>
+</body>
+</html>

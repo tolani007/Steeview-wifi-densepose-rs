@@ -1,0 +1,21 @@
+[package]
+name        = "wifi-densepose-core"
+description = "Core types, traits, and domain models for WiFi DensePose"
+version.workspace     = true
+edition.workspace     = true
+authors.workspace     = true
+license.workspace     = true
+repository.workspace  = true
+
+[features]
+default = ["std", "serde"]
+std     = []
+serde   = ["dep:serde", "ndarray/serde"]
+
+[dependencies]
+thiserror  = { workspace = true }
+serde      = { workspace = true, optional = true }
+serde_json = { workspace = true }
+ndarray    = { workspace = true }
+chrono     = { workspace = true }
+uuid       = { workspace = true }

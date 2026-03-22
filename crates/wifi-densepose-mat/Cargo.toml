@@ -1,0 +1,19 @@
+[package]
+name        = "wifi-densepose-mat"
+description = "WiFi-MAT: disaster response survivor detection via WiFi sensing"
+version.workspace    = true
+edition.workspace    = true
+authors.workspace    = true
+license.workspace    = true
+repository.workspace = true
+
+[dependencies]
+wifi-densepose-core     = { workspace = true }
+wifi-densepose-signal   = { workspace = true }
+wifi-densepose-hardware = { workspace = true }
+thiserror  = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+tokio      = { workspace = true }
+tracing    = { workspace = true }
+chrono     = { workspace = true }
