@@ -31,7 +31,7 @@ services:
       test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
       interval: 15s
       timeout: 5s
-      retries: 3
+      retries: 3 
     networks: [ruview-net]
     restart: unless-stopped
 

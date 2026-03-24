@@ -40,6 +40,12 @@ impl fmt::Display for HardwareMode {
     }
 }
 
+impl HardwareMode {
+    pub fn as_str(&self) -> &'static str {
+        match self { Self::Simulated => "simulated", Self::Udp => "udp", Self::Pcap => "pcap" }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HardwareConfig {
     pub mode: HardwareMode,

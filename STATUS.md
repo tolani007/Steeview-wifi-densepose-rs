@@ -1,7 +1,12 @@
-# RuView WiFi DensePose (Rust Port) — Project Status
+# Steeview WiFi DensePose (Rust Port) — Project Status
 
-## Milestone Reached: Core Engine MVP Completed
-**Date:** March 21, 2026
+## Phase 2 In Progress: Real Hardware Integration
+**Date:** March 24, 2026
+
+---
+
+## Phase 1 Complete ✅ — Rust Engine MVP
+Built and verified March 21, 2026 by Tolani Akinola (EigenTiki).
 
 I, Tolani Akinola have successfully engineered and compiled a high-performance, Palantir-grade Rust port of the RuView WiFi DensePose system. The goal of this phase was to replace the slow Python processing pipeline with a zero-allocation, massively concurrent Rust backend.
 
@@ -17,20 +22,56 @@ I, Tolani Akinola have successfully engineered and compiled a high-performance, 
 
 ---
 
-## Current Status: Paused for Hardware Delivery
-The software MVP is 100% complete and fully verified via the `SimulatedAdapter`. 
+## Phase 2 In Progress 🔄 — ESP32 Hardware Integration
 
-To transition from synthetic simulations to detecting real human presence and vital signs using actual radio waves, specialized hardware is required. 
+### Changes Merged (March 24, 2026)
 
-**Next Action:** 
-I, EigenTiki have ordered **ESP32 microcontrollers** (one to act as the WiFi Transmitter, another as the Receiver) to extract and forward real Channel State Information (CSI) packets to our Rust server. 
+#### Backend — UDP Mode Now Wired End-to-End
+- **`crates/wifi-densepose-api/src/state.rs`** — Added `AppState::new_udp(csi_tx)` constructor; `AppState` now holds an optional `CsiSender` broadcast channel
+- **`crates/wifi-densepose-api/src/ws.rs`** — WebSocket handler now branches:
+  - **Sim mode** (no hardware): each client uses its own `SimulatedAdapter` — backward-compatible
+  - **UDP mode** (ESP32 connected): each client subscribes to the shared broadcast channel fed by `UdpAdapter`; lag handling built in
+- **`crates/wifi-densepose-cli/src/main.rs`** — `ruview start` now checks `HARDWARE_MODE`:
+  - `simulated` (default): unchanged behavior
+  - `udp`: spawns `UdpAdapter` listener in background, wires broadcast channel to all WS clients
+- **`crates/wifi-densepose-config/src/lib.rs`** — Added `HardwareMode::as_str()` helper
 
-The project is officially paused here.
+#### Firmware — New `esp32-firmware/` Directory
+- **`esp32-firmware/platformio.ini`** — PlatformIO project with `tx` and `rx` build targets
+- **`esp32-firmware/tx/main.cpp`** — TX firmware: starts SoftAP on channel 6, sends 802.11 beacons at ~100 Hz
+- **`esp32-firmware/rx/main.cpp`** — RX firmware: connects to TX AP, enables `esp_wifi_set_csi()` callback, converts raw I/Q → amplitude + phase, packs binary UDP datagram in the format expected by `UdpAdapter::parse_esp32_packet()`, sends to Mac at `UDP_PORT=5500`
 
-### Resumption Steps (Upon Hardware Arrival):
-When the ESP32 units arrive, I, EigenTiki will resume the project with the following steps:
-1. **Flash Firmware**: Install CSI-extraction firmware (e.g., ESP32-CSI-Tool) onto the two microcontrollers.
-2. **Hardware Orientation**: Place the TX and RX units on opposite sides of the room.
-3. **Switch to UDP Adapter**: Update the `.env` configuration file to `HARDWARE_MODE=udp`.
-4. **Network Listening**: The Rust backend will immediately begin listening on port `5500` to process the live ESP32 CSI packets instead of simulated data.
-5. **Real-World Calibration**: Tune the Hampel filter thresholds and Fresnel zone math based on the specific multi-path fading conditions of the actual physical room.
+---
+
+## How to Run
+
+### Simulation (no hardware needed)
+```bash
+cargo run --package wifi-densepose-cli -- start
+# → http://localhost:8000
+open ui/viz.html
+```
+
+### Real ESP32 Hardware
+```bash
+# Step 1: Set your Mac's IP in platformio.ini (env:rx → MAC_IP)
+# Step 2: Flash TX ESP32
+cd esp32-firmware && pio run -e tx -t upload
+
+# Step 3: Flash RX ESP32
+pio run -e rx -t upload
+
+# Step 4: Start Rust server in UDP mode
+HARDWARE_MODE=udp cargo run --package wifi-densepose-cli -- start
+# → Server listens for ESP32 packets on UDP port 5500
+# → WebSocket at ws://localhost:8000/ws/sensing
+open ui/viz.html
+```
+
+---
+
+## Next Steps
+1. ⬜ Flash ESP32s (Tiki) — need PlatformIO installed + Mac IP set
+2. ⬜ Verify UDP packets arriving: `nc -ul 5500`
+3. ⬜ Calibrate Hampel filter thresholds for real room
+4. ⬜ Record live demo video with real human detection
