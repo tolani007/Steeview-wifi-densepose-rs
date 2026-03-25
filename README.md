@@ -1,6 +1,6 @@
 # Steeview: WiFi DensePose (Rust Port)
 
-🚀 **[LIVE 24/7 DEMO DASHBOARD](https://steeview-demo-628925872588.us-central1.run.app)** 
+## 🚀 **[🟢 LIVE 24/7 DEMO DASHBOARD](https://steeview-demo-628925872588.us-central1.run.app)** 
 
 Steeview is a high-performance, Palantir-grade Rust tracking engine that extracts **Channel State Information (CSI)** from standard Wi-Fi radio waves to detect, track, and generate 3D human pose estimations through walls—without using a single camera.
 
