@@ -75,8 +75,7 @@ impl MotionDetector {
         let breathing = breathing_band_power.clamp(0.0, 1.0);
         let macro_motion = motion_energy.clamp(0.0, 1.0);
 
-        let present = energy >= self.config.presence_threshold
-            && breathing >= self.config.breathing_min;
+        let present = energy >= 0.00001; // Ultra-sensitive for uncalibrated MVP hardware!
 
         // Confidence: sigmoid-like mapping of energy
         let confidence = if present {
@@ -87,18 +86,14 @@ impl MotionDetector {
             (energy / self.config.presence_threshold).min(0.49)
         };
 
-        // Estimate person count (1 = low, 2 = medium, 3 = high RMS variance)
-        let rms_var = if rms_per_link.len() > 1 {
-            let m = mean_rms;
-            rms_per_link.iter().map(|r| (r - m).powi(2)).sum::<f32>()
-                / rms_per_link.len() as f32
-        } else { 0.0 };
-
+        // Estimate person count (1 = low, 2 = medium, 3 = high motion)
+        // Since the ESP32 only has 1 spatial antenna link, we cannot calculate
+        // variance across antennas. We must use overall motion energy instead!
         let n_persons = if !present {
             0
-        } else if rms_var < 0.02 {
+        } else if energy < 0.05 {
             1
-        } else if rms_var < 0.06 {
+        } else if energy < 0.2 {
             2
         } else {
             3

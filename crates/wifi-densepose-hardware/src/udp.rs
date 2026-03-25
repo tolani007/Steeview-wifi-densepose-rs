@@ -38,11 +38,16 @@ impl UdpAdapter {
         loop {
             match socket.recv_from(&mut buf).await {
                 Ok((len, _peer)) => {
+                    tracing::info!("Received a {len} byte packet from peer!");
                     debug_assert!(len > 0);
                     // Parse minimal ESP32 CSI packet: [frame_id u32 LE][n_sc u8][amp f32×n_sc][phase f32×n_sc]
                     if let Some(frame) = parse_esp32_packet(&buf[..len], n_subcarriers) {
-                        self.frame_count.fetch_add(1, Ordering::Relaxed);
+                        if self.frame_count.fetch_add(1, Ordering::Relaxed) % 100 == 0 {
+                            tracing::info!("Received 100 valid ESP32 CSI packets! frame_id={}", frame.metadata.frame_id);
+                        }
                         let _ = tx.send(Arc::new(frame));
+                    } else {
+                        tracing::warn!("Failed to parse {len}-byte ESP32 packet! Expected {} bytes", 5 + n_subcarriers * 8);
                     }
                 }
                 Err(e) => {

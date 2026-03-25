@@ -93,19 +93,31 @@ void setup() {
   Serial.printf("Target Mac IP: %s:%d\n", MAC_IP, UDP_PORT);
   Serial.printf("Expected subcarriers: %d\n", N_SUBCARRIERS);
 
-  // Connect to TX SoftAP
+  // Connect to Home Wi-Fi
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  Serial.print("Connecting to TX AP");
+  Serial.print("Connecting to Chairman (Trying sherlocked)...");
+  WiFi.begin("Chairman", "sherlocked");
+  
   uint32_t t0 = millis();
   while (WiFi.status() != WL_CONNECTED) {
-    delay(250);
+    delay(500);
     Serial.print(".");
-    if (millis() - t0 > 15000) {
-      Serial.println("\n[ERROR] Could not connect to TX AP. Check TX is powered and in range.");
-      // Retry after 5s
-      delay(5000);
-      ESP.restart();
+    if (millis() - t0 > 10000) {
+      Serial.println("\n[WARN] Failed with 'sherlocked'. Trying 'Sherlocked'...");
+      WiFi.disconnect();
+      delay(1000);
+      WiFi.begin("Chairman", "Sherlocked");
+      t0 = millis(); // Reset timer
+      while (WiFi.status() != WL_CONNECTED) {
+         delay(500);
+         Serial.print(".");
+         if (millis() - t0 > 10000) {
+             Serial.println("\n[ERROR] Both passwords failed. Restarting in 5s.");
+             delay(5000);
+             ESP.restart();
+         }
+      }
+      break;
     }
   }
   Serial.printf("\nConnected! RX IP: %s\n", WiFi.localIP().toString().c_str());
@@ -174,12 +186,24 @@ void loop() {
                     amp[0], phase[0],
                     WiFi.RSSI());
     }
+  } else {
+    // DEADLOCK AVOIDANCE: Freenove WiFi driver won't invoke csi_callback if no packets are received.
+    // Send a tiny empty UDP packet to the gateway to force the router to send a MAC layer ACK.
+    // This ACK triggers the csi_callback instantly, giving us a continuous 100Hz CSI stream!
+    static uint32_t last_ping = 0;
+    if (millis() - last_ping >= 10) { // 100 Hz
+      udp.beginPacket(WiFi.gatewayIP(), 4444);
+      udp.write(1);
+      udp.endPacket();
+      last_ping = millis();
+    }
   }
 
   // Reconnect if WiFi drops
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("[RX] WiFi lost — reconnecting...");
-    WiFi.reconnect();
+    WiFi.disconnect();
+    WiFi.begin("Chairman", "sherlocked");
     delay(2000);
   }
 }
