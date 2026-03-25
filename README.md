@@ -6,7 +6,7 @@ Originally built in Python, this modern Rust rewrite achieves an **~810x speedup
 
 ## 🤝 Collaborators
 This open-source engineering effort is spearheaded by **Tolani Akinola (EigenTiki)**. 
-Supported by **[@insert_instagram_username_here](https://www.instagram.com/ayomikun?igsh=OW5tNHYzcTlyNTRw&utm_source=qr)** — *(Please update this link with your collaborator's Instagram!)*
+Supported by **[@Ayomikun](https://www.instagram.com/ayomikun?igsh=OW5tNHYzcTlyNTRw&utm_source=qr)** — 
 
 ---
 
